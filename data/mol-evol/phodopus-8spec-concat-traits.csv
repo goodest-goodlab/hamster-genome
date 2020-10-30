@@ -1,0 +1,16 @@
+ggtree,label,branch,node,clade label,clade,species,common,node type,bootstrap,gcf,scf,clade col,source
+8,mmus,NA,mmus,mmus,mmus,Mus_musculus,Eastern European house mouse,tip,NA,NA,NA,#333333,Ensembl
+7,mspr,NA,mspr,mspr,mspr,Mus_spretus,Algerian mouse,tip,NA,NA,NA,#333333,Ensembl
+6,rnor,NA,rnor,rnor,rnor,Rattus_norvegicus,Brown rat,tip,NA,NA,NA,#333333,Ensembl
+5,cgri,NA,cgri,cgri,cgri,Cricetulus_griseus,Chinese hamster,tip,NA,NA,NA,#333333,Ensembl
+4,psun,NA,psun,psun,psun,Phodopus_sungorus,Djungarian hamster,tip,NA,NA,NA,#333333,This study
+3,pcam,NA,pcam,pcam,pcam,Phodopus_campbelli,Campbell's dwarf hamster,tip,NA,NA,NA,#333333,This study
+2,prob,NA,prob,prob,prob,Phodopus_robovorski,Roborvorski hamster,tip,NA,NA,NA,#333333,This study
+1,itri,NA,itri,itri,itri,Ictidomys_tridecemlineatus,Thirteen-lined ground squirrel,tip,NA,NA,NA,#333333,Ensembl
+9,9,NA,NA,9,cgri;itri;mmus;mspr;pcam;prob;psun;rnor,NA,NA,ROOT,NA,NA,NA,#333333,NA
+10,10,10,NA,10,cgri;mmus;mspr;pcam;prob;psun;rnor,NA,NA,internal,NA,NA,NA,#333333,NA
+11,11,11,NA,11,cgri;pcam;prob;psun,NA,NA,internal,100,94.8,65.5,#333333,NA
+12,12,pho,pho,pho,pcam;prob;psun,NA,NA,internal,100,97.7,78.6,#db6d00,NA
+13,13,13,NA,13,pcam;psun,NA,NA,internal,100,97.3,90.6,#333333,NA
+14,14,14,NA,14,mmus;mspr;rnor,NA,NA,internal,100,97.1,64.4,#333333,NA
+15,15,mus,mus,mus,mmus;mspr,NA,NA,internal,100,99.5,94.2,#006ddb,NA

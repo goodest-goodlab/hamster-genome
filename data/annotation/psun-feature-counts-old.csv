@@ -1,0 +1,27 @@
+# GFF/GTF feature counting.,,
+# PYTHON VERSION: 3.8.5,,
+# Script call:    /home/gt156213e/bin/core/gxf_feature_counter.py -i dwarf_hamster_23Oct18_myWZ3_10JunAnn.all.name_id_edit.gff -o psun-feature-counts-old.csv --overwrite,,
+# Runtime:        10/27/2020 17:04:12,,
+# ----------------,,
+# Input file:            dwarf_hamster_23Oct18_myWZ3_10JunAnn.all.name_id_edit.gff,,
+# Output file:           psun-feature-counts-old.csv,,
+# ----------------,,
+# 10.27.2020 | 17:04:12 Detecting compression...,,
+# 10.27.2020 | 17:04:12 Counting features...,,
+# Features types read:   11,,
+# Total features read:   15983161,,
+# ----------------,,
+# 10.27.2020 | 17:05:19 Writing output...,,
+# ----------------,,
+feature type,count,avg length
+contig,7756,273233.1851
+match,4622464,1084.258785
+match_part,9567448,232.9059062
+expressed_sequence_match,933014,3765.018311
+gene,22016,23427.89916
+mRNA,22016,23427.89916
+exon,173402,276.0187945
+CDS,159384,163.4346672
+protein_match,438945,3136.383647
+five_prime_UTR,17022,217.8271648
+three_prime_UTR,19694,918.1876714

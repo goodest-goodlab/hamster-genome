@@ -1,0 +1,8 @@
+ggtree,label,branch,node,clade label,clade,species,common,node type,bootstrap,gcf,scf,clade col,source
+1,rnor,NA,rnor,rnor,rnor,Rattus_norvegicus,Brown rat,tip,NA,NA,NA,#333333,Ensembl
+2,mmus,NA,mmus,mmus,mmus,Mus_musculus,House mouse,tip,NA,NA,NA,#333333,Ensembl
+3,mcar,NA,mcar,mcar,mcar,Mus_caroli,Ryukyu mouse,tip,NA,NA,NA,#333333,Ensembl
+4,mpah,NA,mpah,mpah,mpah,Mus_pahari,Gairdner's shrewmouse,tip,NA,NA,NA,#333333,Ensembl
+5,5,NA,NA,5,rnor;mpah;mcar;mmus,NA,NA,ROOT,NA,NA,NA,#333333,NA
+6,6,mus,NA,mus,mcar;mmus;mpah,NA,NA,internal,NA,NA,NA,#333333,NA
+7,7,cm,NA,cm,mcar;mmus,NA,NA,internal,100,91.9,77,#333333,NA

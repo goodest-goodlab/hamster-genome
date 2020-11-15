@@ -1,0 +1,10 @@
+ggtree,label,branch,node,clade label,clade,species,common,node type,bootstrap,gcf,scf,clade col,source
+2,maur,NA,maur,maur,maur,Mesocricetus_auratus,Golden hamster,tip,NA,NA,NA,#333333,Ensembl
+1,cgri,NA,cgri,cgri,cgri,Cricetulus_griseus,Chinese hamster,tip,NA,NA,NA,#333333,Ensembl
+4,psun,NA,psun,psun,psun,Phodopus_sungorus,Djungarian hamster,tip,NA,NA,NA,#333333,This study
+3,pcam,NA,pcam,pcam,pcam,Phodopus_campbelli,Campbell's dwarf hamster,tip,NA,NA,NA,#333333,This study
+5,prob,NA,prob,prob,prob,Phodopus_robovorski,Roborvorski hamster,tip,NA,NA,NA,#333333,This study
+6,6,NA,NA,6,cgri;maur;prob;psun;pcam,NA,NA,ROOT,NA,NA,NA,#333333,NA
+7,7,7,NA,7,cgri;maur,NA,NA,internal,100,98.2,86.4,#333333,NA
+8,8,pho,NA,pho,pcam;prob;psun,NA,NA,internal,100,98.2,86.4,#db6d00,NA
+9,9,cs,NA,cs,pcam;psun,NA,NA,internal,100,97.8,93.4,#db6d00,NA

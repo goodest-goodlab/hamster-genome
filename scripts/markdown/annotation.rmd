@@ -1,0 +1,218 @@
+---
+title: "Phodopus molecular evolution"
+date: "`r format(Sys.time(), '%m/%d/%Y %H:%M:%S %Z')`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+  #html_document:
+    #includes:
+      #in_header: '../html-chunks/rmd_header.html'
+    # df_print: paged
+    # toc: true
+    # toc_float:
+    #   collapsed: false
+    #   smooth_scroll: false
+    code_folding: hide
+---
+
+```{r setup, warning=FALSE, message=FALSE}
+#knitr::opts_chunk$set(echo = FALSE)
+#this.dir <- dirname(parent.frame(2)$ofile)
+#setwd(this.dir)
+
+library(ggplot2)
+library(ggbeeswarm)
+library(cowplot)
+library(ggrepel)
+library(ggsignif)
+#library(plyr)
+#library(colorspace)
+#library(kableExtra)
+source("../lib/design.r")
+
+
+
+#htmltools::includeHTML("../html-chunks/nav.html")
+```
+
+[< Back Home](index.html)
+
+# Feature counts
+
+```{r fig1, warning=FALSE, out.width="100%", fig.align="center"}
+newfile = "../../data/annotation/psun-feature-counts-new.csv"
+oldfile = "../../data/annotation/psun-feature-counts-old.csv"
+
+old = read.csv(oldfile, header=T, comment.char="#")
+new = read.csv(newfile, header=T, comment.char="#")
+
+old$cat = "Old annotation"
+new$cat = "New annotation"
+
+all = rbind(old, new)
+all$cat = factor(all$cat, levels=c("Old annotation", "New annotation"))
+
+all = subset(all, feature.type != "match" & feature.type != "match_part")
+all = subset(all, feature.type != "expressed_sequence_match" & feature.type != "protein_match")
+comp_sub_p = ggplot(all, aes(x=feature.type, y=count, fill=cat)) +
+  geom_bar(position="dodge", stat="identity") +
+  scale_fill_manual(values=corecol(numcol=2, pal="wilke", offset=4)) +
+  scale_y_continuous(expand=c(0,0)) +
+  xlab("Feature type") +
+  ylab("# features") +
+  bartheme() +
+  theme(axis.text.x=element_text(angle=25, hjust=1))
+
+print(comp_sub_p)
+```
+
+# Gene lengths (< 100000bp)
+
+```{r fig2, warning=FALSE, out.width="100%", fig.align="center"}
+newfile = "../../data/annotation/psun-genes.tab"
+oldfile = "../../data/annotation/psun-genes-old.tab"
+
+old = read.csv(oldfile, header=T, sep="\t", comment.char="#")
+new = read.csv(newfile, header=T, sep="\t", comment.char="#")
+
+old$length = old$end - old$start
+new$length = new$end - new$start
+
+old$cat = "Old annotation"
+new$cat = "New annotation"
+
+all = rbind(old, new)
+all$cat = factor(all$cat, levels=c("Old annotation", "New annotation"))
+
+all$chr.cat = "Auto"
+all$chr.cat[all$chr=="ScmyWZ3_7747_HRSCAF_7900"] = "X"
+
+all = subset(all, length<100000)
+
+len_p_all = ggplot(all, aes(x=cat, y=length, fill=cat)) +
+  geom_quasirandom(size=2, alpha=0.7, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  ylab("Gene length (bp)") +
+  xlab("") +
+  ggtitle("All genes") + 
+  scale_fill_manual(values=corecol(numcol=2, pal="wilke", offset=4)) +
+  bartheme() +
+  theme(legend.position="none")
+print(len_p_all)
+
+xgenes = subset(all, chr=="ScmyWZ3_7747_HRSCAF_7900")
+
+len_p_x = ggplot(xgenes, aes(x=cat, y=length, fill=cat)) +
+  geom_quasirandom(size=2, alpha=0.7, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  ylab("Gene length (bp)") +
+  xlab("") +
+  ggtitle("X genes") +
+  scale_fill_manual(values=corecol(numcol=2, pal="wilke", offset=4)) +
+  bartheme() +
+  theme(legend.position="none")
+print(len_p_x)
+```
+
+# Gene lengths (< 100000bp) vs. chromosome lengths
+
+```{r fig3, warning=FALSE, message=FALSE, out.width="100%", fig.align="center"}
+in_data = read.csv("../../data/annotation/psun-gene-counts.csv", header=T)
+
+genes_p = ggplot(in_data, aes(x=length, y=X..genes)) +
+  geom_point(size=4, color=corecol(numcol=1), alpha=0.7) +
+  geom_smooth(method="lm", se=F, linetype="dashed", size=1, color="#999999") +
+  geom_text_repel(aes(label=chrome),hjust=0,vjust=0) +
+  xlab("Scaffold length") +
+  ylab("# of genes") +
+  bartheme() + 
+  theme(axis.text.x=element_text(angle=25, hjust=1))
+
+#print(genes_p)
+
+bases_p = ggplot(in_data, aes(x=length, y=X..bases.in.genes)) +
+  geom_point(size=4, color=corecol(numcol=1), alpha=0.7) +
+  geom_smooth(method="lm", se=F, linetype="dashed", size=1, color="#999999") +
+  geom_text_repel(aes(label=chrome),hjust=0,vjust=0) +
+  xlab("Scaffold length") +
+  ylab("# of bases in genes") +
+  bartheme() +
+  theme(axis.text.x=element_text(angle=25, hjust=1))
+
+#print(bases_p)
+
+perc_p = ggplot(in_data, aes(x=1, y=X..bases.in.genes.1)) +
+  geom_quasirandom(size=4, alpha=0.7, width=0, color=corecol(numcol=1)) +
+  #geom_boxplot(outlier.shape=NA, alpha=0, width=0.1) +
+  scale_x_continuous(limits=c(0.9,1.1)) +
+  scale_y_continuous(limits=c(0,1)) +
+  xlab("") +
+  ylab("% of bases in genes") +
+  bartheme() +
+  theme(axis.line.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  coord_flip()
+
+#print(perc_p)
+                 
+p = plot_grid(genes_p, bases_p, ncol=2, labels=c("A","B"), label_size=16, align='vh')
+print(p)
+```
+
+# % of bases in genes (< 100000bp)  by chromosome
+
+```{r fig4, warning=FALSE, out.width="100%", fig.align="center"}
+in_data$X..bases.in.genes.1 = in_data$X..bases.in.genes.1 * 100
+
+avg_p = ggplot(in_data, aes(x=chrome, y=X..bases.in.genes.1)) +
+  geom_hline(yintercept=mean(in_data$X..bases.in.genes.1), size=1.5, linetype="dashed", color="#d3d3d3")
+  #geom_hline(yintercept=median(in_data$X..bases.in.genes.1), size=1.5, linetype="dashed", color="#999999")
+# Start plot of avg. distance to random wRF per chrome
+
+k = 1
+for(chrome in levels(in_data$chrome)){
+  #print(chrome)
+  #print(k)
+  avg_p = avg_p + geom_segment(x=k, y=0, xend=k, yend=in_data$X..bases.in.genes.1[in_data$chrome==chrome], color="#666666", linetype="dotted")
+  k = k + 1
+}
+# Add the dotted lines for each chrome
+
+avg_p = avg_p + geom_point(size=4, color="#920000") +
+  #geom_text(data=blah, aes(x=20.4, y=avg_nonsig_chr-1, label=paste("Avg. = ", avg_nonsig_chr, "Mb", sep="")),  size=4, color="#333333") +
+  #geom_text(data=blah, aes(x=20.4, y=med_nonsig_chr+1, label=paste("Median = ", med_nonsig_chr, "Mb", sep="")),  size=4, color="#333333") +
+  xlab("Chromosome") +
+  ylab("% of bases in a gene") +
+  scale_y_continuous(expand=c(0,0), limits=c(0,100)) +
+  bartheme() +
+  theme(axis.text.x=element_text(angle=15, hjust=1))
+print(avg_p)
+```
+
+# Gene length (< 100000bp) distributions by chromosome
+
+```{r fig5, warning=FALSE, out.width="100%", fig.align="center"}
+len_data = read.csv("../../data/annotation/psun-gene-lens.csv", header=T)
+len_data = subset(len_data, gene.len < 100000)
+
+x_comps = list(c("X_R", "X_NR"))
+len_p = ggplot(len_data, aes(x=chrome, y=gene.len, fill=chrome)) +
+  geom_quasirandom(size=2, alpha=0.7, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosome") +
+  ylab("Gene length (bp)") +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=25, hjust=1))
+
+print(len_p)
+```
+
+[< Back Home](index.html)
+
+```{r footer}
+cat("Page last updated:", format(Sys.time(), "%m/%d/%Y %H:%M:%S %Z"))
+htmltools::includeHTML("../html-chunks/rmd_footer.html")
+```

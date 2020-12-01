@@ -1368,13 +1368,82 @@ t6_data %>% kable(col.names=c("Chromosome","Number of genes", "Avg. dS", "Avg. d
 
 ```
 
+# Amino acid profile change
 
+Ancestral reconstructions with M1 free-ratio model, branches leading to Mus clade and Phodopus Clade
+
+```{r fig26, warning=FALSE, out.width="100%", fig.align="center"}
+pho_aa_data = read.csv("../../data/mol-evol/phodopus-5spec-m1-anc.csv", header=T, comment.char="#")
+pho_aa_data = subset(pho_aa_data, clade=="pcam;prob;psun")
+
+pho_aa_x = subset(pho_aa_data, chr=="ScmyWZ3_7747_HRSCAF_7900")
+pho_aa_x$label = "Phodopus X"
+
+pho_aa_auto = subset(pho_aa_data, chr!="ScmyWZ3_7747_HRSCAF_7900")
+pho_aa_auto$label = "Phodopus Auto"
+
+
+mus_aa_data = read.csv("../../data/mol-evol/mus-4spec-m1-anc.csv", header=T, comment.char="#")
+mus_aa_data = subset(mus_aa_data, clade=="mcar;mmus;mpah")
+
+mus_aa_x = subset(mus_aa_data, chr=="X")
+mus_aa_x$label = "Mus X"
+
+mus_aa_auto = subset(mus_aa_data, chr!="X")
+mus_aa_auto$label = "Mus Auto"
+
+aa_data = rbind(pho_aa_x, pho_aa_auto, mus_aa_x, mus_aa_auto)
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"), c("Mus Auto", "Phodopus Auto"), c("Mus X", "Phodopus X"))
+
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+aa_p = ggplot(aa_data, aes(label, avg.sub.score, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("Avg. BLOSUM score per gene") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+print(aa_p)
+```
+
+```{r fig27, warning=FALSE, out.width="100%", fig.align="center"}
+pho_aa_xr = subset(pho_aa_x, start < 35225145)
+pho_aa_xr$label = "Phodopus X recombining"
+
+pho_aa_xn = subset(pho_aa_x, start >= 35225145)
+pho_aa_xn$label = "Phodopus X non-recombining"
+
+aa_data = rbind(pho_aa_xr, pho_aa_xn, pho_aa_auto, mus_aa_x, mus_aa_auto)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+aa_p = ggplot(aa_data, aes(label, avg.sub.score, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("Avg. BLOSUM score per gene") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10))
+print(aa_p)
+```
 
 # Results summary
 
 1. Lower dS on X in both Mus and Phodopus
 2. Faster dN/dS on X in branches leading to Mus and Phodopus (M1), Mus clade (M2), but NOT phodopus clade (M2). Results consistent between PAML's M1 model and HyPhy's FitMG94.
 3. No difference between recombining and non-recombining portions of the X in phodopus.
+4. No big difference between amino acid profile changes between Mus and Phodopus or Autosomes and X.
 
 [< Back Home](index.html)
 

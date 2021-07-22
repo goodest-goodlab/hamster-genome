@@ -1,0 +1,8 @@
+ggtree,label,branch,node,clade label,clade,species,common,node type,bootstrap,gcf,scf,clade col,source
+1,cgri,NA,cgri,cgri,cgri,Cricetulus_griseus,Chinese hamster,tip,NA,NA,NA,#333333,Ensembl
+3,psun,NA,psun,psun,psun,Phodopus_sungorus,Djungarian hamster,tip,NA,NA,NA,#333333,This study
+2,pcam,NA,pcam,pcam,pcam,Phodopus_campbelli,Campbell's dwarf hamster,tip,NA,NA,NA,#333333,This study
+4,prob,NA,prob,prob,prob,Phodopus_robovorski,Roborvorski hamster,tip,NA,NA,NA,#333333,This study
+5,5,NA,NA,6,cgri;prob;psun;pcam,NA,NA,ROOT,NA,NA,NA,#333333,NA
+6,6,pho,NA,pho,pcam;prob;psun,NA,NA,internal,NA,NA,NA,#db6d00,NA
+7,7,cs,NA,cs,pcam;psun,NA,NA,internal,100,NA,NA,#db6d00,NA

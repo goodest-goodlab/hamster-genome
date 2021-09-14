@@ -1,0 +1,1741 @@
+---
+title: "Phodopus molecular evolution"
+date: "`r format(Sys.time(), '%m/%d/%Y %H:%M:%S %Z')`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+  #html_document:
+    #includes:
+      #in_header: '../html-chunks/rmd_header.html'
+    # df_print: paged
+    # toc: true
+    # toc_float:
+    #   collapsed: false
+    #   smooth_scroll: false
+    code_folding: hide
+---
+
+```{r setup, warning=FALSE, message=FALSE}
+#knitr::opts_chunk$set(echo = FALSE)
+#this.dir <- dirname(parent.frame(2)$ofile)
+#setwd(this.dir)
+
+library(ggtree)
+library(ggplot2)
+library(ggbeeswarm)
+library(cowplot)
+library(ggsignif)
+library(dplyr)
+library(colorspace)
+library(kableExtra)
+source("../lib/design.r")
+
+
+
+#htmltools::includeHTML("../html-chunks/nav.html")
+```
+
+[< Back Home](index.html)
+
+# Main questions
+
+1. Does lack of recombination affect molecular evolution on the X chromosome in phodopus?
+
+<!-- # Hypotheses
+
+1. dN/dS will be XX in the non-recombining region
+2. dS could be HIGHER in the non-recombining region because selective sweeps cannot reduce diversity via recombination.
+3. dS could be LOWER in the non-recomining region if recombination is mutagenic. -->
+
+# Mus and Phodopus species tree branch rates
+
+Goal: compare rate distributions for TWO small sets of rodent species, including phodopus, to determine how lack of recombination on the phodopus X shapes molecular evolution on that chromosome.
+
+```{r read-m1, warning=FALSE}
+pho_tree_file = "../../data/mol-evol/phodopus-5spec-iqtree-concat-rooted.tre"
+pho_tree = read.tree(pho_tree_file)
+pho_trait_file = "../../data/mol-evol/phodopus-5spec-concat-traits.csv"
+pho_data = read.csv(pho_trait_file, header=TRUE)
+pho_data = pho_data[order(pho_data$ggtree),]
+pho_branch_labels = pho_data
+pho_branch_labels$node[pho_branch_labels$node.type=='tip'] = NA
+pho_data$clade = as.character(pho_data$clade)
+
+pho_m1_data = read.csv("../../data/mol-evol/phodopus-5spec-m1.csv", header=T, comment.char="#")
+pho_m1_data$clade = as.character(pho_m1_data$clade)
+# Phodopus data
+
+mus_tree_file = "../../data/mol-evol/mus-4spec-iqtree-concat-rooted.tre"
+mus_tree = read.tree(mus_tree_file)
+mus_trait_file = "../../data/mol-evol/mus-4spec-concat-traits.csv"
+mus_data = read.csv(mus_trait_file, header=TRUE)
+mus_data = mus_data[order(mus_data$ggtree),]
+mus_branch_labels = mus_data
+mus_branch_labels$node[mus_branch_labels$node.type=='tip'] = NA
+mus_data$clade = as.character(mus_data$clade)
+
+mus_m1_data = read.csv("../../data/mol-evol/mus-4spec-m1.csv", header=T, comment.char="#")
+mus_m1_data$clade = as.character(mus_m1_data$clade)
+# Mus data
+```
+
+
+```{r filter-pho-m1, warning=FALSE}
+pho_data$avg.dnds = NA
+pho_data$avg.dn = NA
+pho_data$avg.ds = NA
+pho_data$num.monophyletic = NA
+pho_data$num.monophyletic.filtered = NA
+
+pho_clade_data = list()
+pho_clade_data_f = list()
+pho_ds_dists = list()
+i =  1
+for(c in pho_data$clade){
+  if(pho_data$node.type[pho_data$clade==c]=="ROOT"){
+    next
+  }
+  
+  cur_label = as.character(pho_data$clade.label[pho_data$clade==c])
+  cur_data = subset(pho_m1_data, clade==c & clade.ds <= 2)
+  cur_data$clade.label = cur_label
+  
+  ds_dist = ggplot(cur_data, aes(x=clade.ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(pho_data$clade.label[pho_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+  
+  #print(ds_dist)
+  #stop()
+  pho_ds_dists[[i]] = ds_dist
+  i = i + 1
+  
+  cur_data_f = subset(cur_data, clade.ds < 0.3 & clade.dn.ds <= 2)
+  
+  pho_data$num.monophyletic[pho_data$clade==c] = nrow(cur_data)
+  pho_data$num.monophyletic.filtered[pho_data$clade==c] = nrow(cur_data_f)
+  pho_data$avg.dnds[pho_data$clade==c] = mean(cur_data_f$clade.dn.ds)
+  pho_data$avg.dn[pho_data$clade==c] = mean(cur_data_f$clade.dn)
+  pho_data$avg.ds[pho_data$clade==c] = mean(cur_data$clade.ds)
+  
+  pho_clade_data[[cur_label]] = length(cur_data[,1])
+  pho_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+```{r filter-mus-m1, warning=FALSE}
+mus_data$avg.dnds = NA
+mus_data$avg.dn = NA
+mus_data$avg.ds = NA
+mus_data$num.monophyletic = NA
+mus_data$num.monophyletic.filtered = NA
+
+mus_clade_data = list()
+mus_clade_data_f = list()
+mus_ds_dists = list()
+i =  1
+for(c in mus_data$clade){
+  if(mus_data$node.type[mus_data$clade==c]=="ROOT"){
+    next
+  }
+  
+  cur_label = as.character(mus_data$clade.label[mus_data$clade==c])
+  cur_data = subset(mus_m1_data, clade==c & clade.ds <= 2)
+  cur_data$clade.label = cur_label
+  
+  ds_dist = ggplot(cur_data, aes(x=clade.ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(mus_data$clade.label[mus_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+  
+  #print(ds_dist)
+  #stop()
+  mus_ds_dists[[i]] = ds_dist
+  i = i + 1
+  
+  cur_data_f = subset(cur_data, clade.ds < 0.3 & clade.dn.ds <= 2)
+  
+  mus_data$num.monophyletic[mus_data$clade==c] = nrow(cur_data)
+  mus_data$num.monophyletic.filtered[mus_data$clade==c] = nrow(cur_data_f)
+  mus_data$avg.dnds[mus_data$clade==c] = mean(cur_data_f$clade.dn.ds)
+  mus_data$avg.dn[mus_data$clade==c] = mean(cur_data_f$clade.dn)
+  mus_data$avg.ds[mus_data$clade==c] = mean(cur_data$clade.ds)
+  
+  mus_clade_data[[cur_label]] = length(cur_data[,1])
+  mus_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+# Methods
+
+## Step 0: Genome assembly and annotation (expand later)
+
+Phodopus sungorous was de novo assembled with Dovetails, and campbelli and robovorski were assembled based on iterative mapping to the sungorus assembly. Annotation was done using the Maker pipeline (Seb's first attempt).
+
+## Step 1: Select orthologs between 5 hamster species and 3 mouse+rat species separately
+
+We selected 2 previously sequenced hamster species to estimate and compare rates of synonymous and non-synonymous substitutions with our set of newly sequenced Phodopus genomes. Separately, we selected 3 mouse species + rat to compare rates between phodopus and mus (Table 1). The CDS sequences for these species were downloaded from Ensembl (release 100).
+
+```{r table1, warning=FALSE}
+t1_data_pho = subset(pho_data, node.type=='tip')
+t1_data_pho = subset(t1_data_pho, select=c(species, common, source))
+t1_data_pho$set = "Phodopus"
+names(t1_data_pho) = c("Species", "Common name", "Source", "Dataset")
+rownames(t1_data_pho) = c()
+# Phodopus data
+
+t1_data_mus = subset(mus_data, node.type=='tip')
+t1_data_mus = subset(t1_data_mus, select=c(species, common, source))
+t1_data_mus$set = "Mus"
+names(t1_data_mus) = c("Species", "Common name", "Source", "Dataset")
+rownames(t1_data_mus) = c()
+# Mus data
+
+t1_data = rbind(t1_data_pho, t1_data_mus)
+
+t1_data %>% kable(caption="Selected species for comparative molecular evolution analysis") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)
+
+```
+
+Phylogenetic and comparative analyses often rely on selection of a single sequence from each species to assess relatedness of genes. However because genes can have multiple transcripts due to alternative splicing of exons and because genes can be duplicated or lost over time this requires selection of sequences in each species at two levels: 1) selection of a single transcript within a gene and 2) selection of genes without paralogs (i.e. those that are single copy across all species). The most common method for selection of transcripts is to simply pick the longest transcript in each species.
+
+#### Mus transcript selection:
+
+1. Total Mus transcripts: 142,447
+2. Longest transcripts: 21,875
+3. Single-copy between 4 species: 15,772
+4. X-genes before alignments: 551
+5. X-genes after alignments: 526
+
+#### Phodopus transcript selection:
+
+1. Total transcripts predicted from Maker: 27,988
+2. Longest BLAST match to CGRI transcripts: 14,768
+3. Also single-copy in MAUR: 12,413
+4. X-genes before alignments: 493
+5. X-genes after alignments: 413
+
+## Step 2: Align orthologs
+
+We aligned the coding sequences from each single-copy ortholog using a suite of programs in the MACSE software as follows:
+
+1. Trim non-homologous regions with MACSE's trimNonHomologousFragments program 
+2. Codon aware alignments with MACSE's alignSequences program
+3. Trim gappy edges from alignment with MACSE's trimAlignment program
+4. Removed alignments with premature stop codons
+
+## Step 3: Construct species and gene trees
+
+We constructed maximum likelihood gene trees and a concatenated species tree using IQ-tree aligned coding sequences. We used IQ-trees concordance factors to assess the confidence of the species tree as well as the consistency of the gene trees. We find that most branches in the species tree are consistently present in a high proportion of gene trees (>90% for all branches).
+
+```{r fig1, warning=FALSE, out.width="100%", fig.align="center"}
+node_check = F
+
+##########
+# Node label checking
+if(node_check){
+  node_test = ggtree(pho_tree, size=2, ladderize=F) +
+    ggplot2::xlim(0, 0.05) +
+    geom_tiplab(color="#333333", fontface='italic', size=5) +
+    geom_text(aes(label=node), hjust=-.3, vjust=-.3, color="#ff6db6") +
+    geom_nodepoint(color="#666666", alpha=0.85, size=4)
+  
+  #node_test = node_test %>% rotate(25) %>% rotate(26) %>% rotate(27) %>% rotate(28) %>% rotate(29) %>% rotate(30) %>% rotate(32) %>%
+  #  rotate(33) %>% rotate(35) %>% rotate(36) %>% rotate(39) %>% rotate(41) %>% rotate(44)
+  
+  print(node_test)  
+  stop("Node check ok")
+}
+# Node label checking
+##########
+
+h = corecol(numcol=1, pal="wilke", offset=3)
+l = corecol(numcol=1, offset=3)
+
+clade_cols = corecol(numcol=3)
+clade_labs = c("pho", "cs")
+
+pho_tree_fig = ggtree(pho_tree, size=2, ladderize=F, aes(color=pho_data$gcf)) +
+  scale_color_continuous(name='gCF', low=l, high=h, limits=c(0,100)) +
+  ggplot2::xlim(0, 0.07) +
+  geom_tiplab(aes(label=pho_data$species), color="#333333", fontface='italic', size=5) +
+  #geom_cladelabel(node=13, size=2, label="pho", color="green", offset = 0.07, align=T) +
+  #geom_text(aes(label=rodent_data$label), hjust=-.3, vjust=-.3, color="#ff6db6") +
+  geom_label(aes(x=branch, label=pho_branch_labels$branch), color="#d3d3d3", fill=pho_branch_labels$clade.col) + 
+  #labs(caption="Figure 1: 5 species hamster phylogeny constructed from concatenation of XX single-copy orthologs.\nGene concordance factors (gCF) are indicated by branch colors.") +
+  theme(legend.position=c(0.9,0.25),
+        plot.caption=element_text(hjust=0))
+
+mus_tree_fig = ggtree(mus_tree, size=2, ladderize=F, aes(color=mus_data$gcf)) +
+  scale_color_continuous(name='gCF', low=l, high=h, limits=c(0,100)) +
+  ggplot2::xlim(0, 0.07) +
+  geom_tiplab(aes(label=mus_data$species), color="#333333", fontface='italic', size=5) +
+  #geom_cladelabel(node=13, size=2, label="pho", color="green", offset = 0.07, align=T) +
+  #geom_text(aes(label=rodent_data$label), hjust=-.3, vjust=-.3, color="#ff6db6") +
+  geom_label(aes(x=branch, label=mus_branch_labels$branch), color="#d3d3d3", fill=mus_branch_labels$clade.col) + 
+  #labs(caption="Figure 1: 5 species hamster phylogeny constructed from concatenation of XX single-copy orthologs.\nGene concordance factors (gCF) are indicated by branch colors.") +
+  theme(legend.position=c(0.9,0.25),
+        plot.caption=element_text(hjust=0))
+
+#geom_text(aes(label=rodent_data$support), hjust=-.1, color="#006ddb") +
+#geom_nodepoint(color="#666666", alpha=0.85, size=4)
+
+#print(mus_tree_fig)
+
+tree_fig = plot_grid(pho_tree_fig, mus_tree_fig, nrow=1, align='vh')
+cap = "Figure 1: (left) 5 species hamster phylogeny constructed from concatenation of 10,300 single-copy orthologs.\n(right) 4 species mouse phylogeny constructed from concatenation of 15,427 single-copy orthologes\nGene concordance factors (gCF) are indicated by branch colors."
+pcap = ggdraw() + draw_label(cap, size=10, fontface="bold", x=0, hjust=0) + theme(plot.margin=margin(0,0,0,7))
+tree_p = plot_grid(tree_fig, pcap, ncol=1, rel_heights=c(1, 0.1))
+print(tree_p)
+```
+
+## Step 4: Estimation of synonymous (dS) and nonysynonymous (dN) substitution rates
+
+We used codeml within the PAML program to estimate rates of synonymous (dS) and non-synonymous (dN) substitutions using a free-ratio model (model=1, NSsites=0) to get an estimate of rate for each branch in our phylogeny. Relationships among genes may differ amongst themselves and relative to the species relationships due to biological factors such as incomplete lineage sorting and introgression. In cases where a gene tree and the species tree disagree, inferring substitutions using the species tree (the wrong tree in this case) can lead to spurious inferences of substitutions and affect rate estimates. To mitigate this, we used the corresponding gene tree for each alignment when estimating rates. When compiling rate estimates, we only counted rates for a branch in the species tree if it existed in the gene tree (Table 2).
+
+```{r table2, warning=FALSE}
+# t2_data = data.frame("Branch"=c(), "Gene trees"=c(), "Genes after dS filter"=c())
+# for(clade_label in pho_data$clade.label){
+#   if(pho_data$node.type[pho_data$clade.label==clade_label]!="internal"){
+#     next
+#   }
+# 
+#   t2_data = rbind(t2_data, data.frame("Branch"=clade_label, "Gene trees"=clade_data[[clade_label]], "Genes after dS filter"=length(clade_data_f[[clade_label]][,1])))
+# }
+# 
+# rownames(t2_data) = c()
+# 
+# t2_data %>% kable(col.names=c("Branch","Monophyletic gene trees", "Genes after dS filter"), caption="Number of gene trees containing branch before and after dS filtering", align="l") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)# %>%
+#   #column_spec(1, width="7em") %>%
+#   #column_spec(2, width="13em")
+
+```
+
+### Filtering based on dS
+
+As another check on alignment quality, we assessed distributions of dS along each branch and only counted genes for each branch where dS fell below 0.3. (QUESTION: should this dS filter step have a different threshold for each branch?) We also omitted genes for a branch where dN/dS was greater than 2.
+
+```{r fig2, warning=FALSE, message=FALSE, out.width="100%", fig.align="center"}
+ds_plots = plot_grid(plotlist=pho_ds_dists, nrow=3)
+print(ds_plots)
+
+ds_plots = plot_grid(plotlist=mus_ds_dists, nrow=3)
+print(ds_plots)
+```
+
+### Post filter dS distributions per branch
+
+```{r fig3, warning=FALSE, out.width="100%", fig.align="center"}
+pho_m1_data_f = do.call("rbind", pho_clade_data_f)
+mus_m1_data_f = do.call("rbind", mus_clade_data_f)
+m1_data_f = rbind(pho_m1_data_f, mus_m1_data_f)
+
+#clade_cols = as.character(pho_data$clade.col)
+#clade_labs = as.character(pho_data$clade.label)
+
+x_comps = list(c("mus", "pho"))
+
+clade_ds_p = ggplot(m1_data_f, aes(clade.label, clade.ds)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5, fill="#333333") +
+  #geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("dS") +
+  #scale_fill_manual(limits=clade_labs, values=clade_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=25, hjust=1, size=8))
+
+print(clade_ds_p)
+```
+
+### Post filter dN distributions per branch
+
+```{r fig4, warning=FALSE, out.width="100%", fig.align="center"}
+
+clade_cols = as.character(pho_data$clade.col)
+clade_labs = as.character(pho_data$clade.label)
+
+#x_comps = list(c("mus", "pho"))
+
+clade_dn_p = ggplot(m1_data_f, aes(clade.label, clade.dn)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5, fill="#333333") +
+  #geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("dN") +
+  scale_fill_manual(limits=clade_labs, values=clade_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=25, hjust=1, size=8)
+        )
+
+print(clade_dn_p)
+
+
+```
+
+### Post filter dN/dS distributions per branch
+
+```{r fig5, warning=FALSE, out.width="100%", fig.align="center"}
+
+clade_cols = as.character(pho_data$clade.col)
+clade_labs = as.character(pho_data$clade.label)
+
+x_comps = list(c("mus", "pho"))
+
+clade_dnds_p = ggplot(m1_data_f, aes(clade.label, clade.dn.ds)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5, fill="#333333") +
+  #geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("dN/dS") +
+  #scale_fill_manual(limits=clade_labs, values=clade_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=25, hjust=1, size=8))
+
+print(clade_dnds_p)
+```
+
+# Results (M1 branch leading to Phodopus and Mus only)
+
+## 1. X vs. autosome dS distributions in Mus and Phodopus
+
+```{r fig6, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_branches = c("cs")
+pho_a = data.frame()
+pho_x = data.frame()
+for(b in pho_branches){
+  pho_a = rbind(pho_a, subset(pho_clade_data_f[[b]], chr!="ScmyWZ3_7747_HRSCAF_7900"))
+  pho_x = rbind(pho_x, subset(pho_clade_data_f[[b]], chr=="ScmyWZ3_7747_HRSCAF_7900"))
+}
+pho_x$label = "Phodopus X"
+pho_a$label = "Phodopus Auto"
+
+mus_branches = c("cm")
+mus_a = data.frame()
+mus_x = data.frame()
+for(b in mus_branches){
+  mus_a = rbind(mus_a, subset(mus_clade_data_f[[b]], chr!="X"))
+  mus_x = rbind(mus_x, subset(mus_clade_data_f[[b]], chr=="X"))
+}
+mus_x$label = "Mus X"
+mus_a$label = "Mus Auto"
+
+
+chrome_data = rbind(pho_x, pho_a, mus_x, mus_a)
+
+# t = as.data.frame(table(chrome_data$chr))
+# test = ggplot(t, aes(x=Var1, y=Freq)) +
+#   geom_bar(stat="identity") +
+#   scale_y_continuous(expand=c(0,0)) +
+#   bartheme() +
+#   theme()
+# print(test)
+
+
+#clade_cols = as.character(rodent_data$clade.col)
+#clade_labs = as.character(rodent_data$clade.label)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, clade.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_ds_p)
+```
+
+## 2. X vs. autosome dN distributions in Mus and Phodopus
+
+```{r fig7, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, clade.dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dn_p)
+```
+
+## 3. X vs. autosome dN/dS distributions in Mus and Phodopus
+
+```{r fig8, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, clade.dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dnds_p)
+```
+
+```{r table3, warning=FALSE}
+t3_data = data.frame("chrome"=c("Mus auto", "Mus X", "Phodopus auto", "Phodopus X"), 
+                     "genes"=c(length(mus_a[,1]), length(mus_x[,1]), length(pho_a[,1]), length(pho_x[,1])), 
+                     "avg.ds"=c(mean(mus_a$clade.ds), mean(mus_x$clade.ds), mean(pho_a$clade.ds), mean(pho_x$clade.ds)), 
+                     "avg.dn"=c(mean(mus_a$clade.dn), mean(mus_x$clade.dn), mean(pho_a$clade.dn), mean(pho_x$clade.dn)), 
+                     "avg.dnds"=c(mean(mus_a$clade.dn.ds), mean(mus_x$clade.dn.ds), mean(pho_a$clade.dn.ds), mean(pho_x$clade.dn.ds)))
+
+rownames(t3_data) = c()
+
+t3_data %>% kable(col.names=c("Chromosome","Number of genes", "Avg. dS", "Avg. dN", "Avg. dN/dS"), caption="Substitution rates for Mus and Phodopus branches", align="l") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)# %>%
+  #column_spec(1, width="7em") %>%
+  #column_spec(2, width="13em")
+
+```
+
+## 4. X vs. autosome dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+
+```{r fig9, warning=FALSE, out.width="100%", fig.align="center"}
+
+        # if scaff == "ScmyWZ3_7747_HRSCAF_7900":
+        #     if int(end) < 35225145:
+        #         scaff = "ScmyWZ3_7747_HRSCAF_7900_R";
+        #         chrome = "chrX_R";
+        #     elif int(start) >= 35225145:
+        #         scaff = "ScmyWZ3_7747_HRSCAF_7900_NR"
+        #         chrome = "chrX_NR";
+        #     else:
+        #         chrome = "chrX";
+        # elif scaff in scaff_to_chr:
+        #     chrome =  scaff_to_chr[scaff];
+        # else:
+        #     chrome = "NA";
+
+pho_xr = subset(pho_x, start < 35225145)
+pho_xr$label = "Phodopus X recombining"
+pho_xnr = subset(pho_x, start >= 35225145)
+pho_xnr$label = "Phodopus X non-recombining"
+
+chrome_data = rbind(mus_a, mus_x, pho_a, pho_xr, pho_xnr)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, clade.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_ds_p)
+```
+
+## 5. X vs. autosome dN distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+
+```{r fig10, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, clade.dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dn_p)
+```
+
+## 6. X vs. autosome dN/dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+
+```{r fig11, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, clade.dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dnds_p)
+```
+
+## 7. M1 summary stats
+
+```{r table4, warning=FALSE}
+t4_data = data.frame("chrome"=c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X non-recombining", "Phodopus X recombining"), 
+                     "genes"=c(length(mus_a[,1]), length(mus_x[,1]), length(pho_a[,1]), length(pho_xnr[,1]), length(pho_xr[,1])), 
+                     "avg.ds"=c(mean(mus_a$clade.ds), mean(mus_x$clade.ds), mean(pho_a$clade.ds), mean(pho_xnr$clade.ds), mean(pho_xr$clade.ds)), 
+                     "avg.dn"=c(mean(mus_a$clade.dn), mean(mus_x$clade.dn), mean(pho_a$clade.dn), mean(pho_xnr$clade.dn), mean(pho_xr$clade.dn)), 
+                     "avg.dnds"=c(mean(mus_a$clade.dn.ds), mean(mus_x$clade.dn.ds), mean(pho_a$clade.dn.ds), mean(pho_xnr$clade.dn.ds), mean(pho_xr$clade.dn.ds))
+                     )
+
+rownames(t4_data) = c()
+
+t4_data %>% kable(col.names=c("Chromosome","Number of genes", "Avg. dS", "Avg. dN", "Avg. dN/dS"), caption="Substitution rates for Mus and Phodopus branches", align="l") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)# %>%
+  #column_spec(1, width="7em") %>%
+  #column_spec(2, width="13em")
+
+```
+
+# Results (Clade model C; not useful?)
+
+```{r readcmc, warning=FALSE}
+cmc_data = read.csv("../../data/mol-evol/phodopus-5spec-cmc.csv", header=TRUE, comment.char="#")
+
+cmc_a = subset(cmc_data, chr!="ScmyWZ3_7747_HRSCAF_7900")
+cmc_a$label = "Phodopus Auto"
+
+cmc_a_1_b = subset(cmc_a, select=c(label, background.clade.omega.1))
+cmc_a_1_b$class = "Background omega Auto 1"
+names(cmc_a_1_b)[2] = "omega"
+cmc_a_2_b = subset(cmc_a, select=c(label, background.clade.omega.2))
+cmc_a_2_b$class = "Background omega Auto 2"
+names(cmc_a_2_b)[2] = "omega"
+cmc_a_3_b = subset(cmc_a, select=c(label, background.clade.omega.3))
+cmc_a_3_b$class = "Background omega Auto 3"
+names(cmc_a_3_b)[2] = "omega"
+
+cmc_a_1_t= subset(cmc_a, select=c(label, target.clade.omega.1))
+cmc_a_1_t$class = "Target omega Auto 1"
+names(cmc_a_1_t)[2] = "omega"
+cmc_a_2_t = subset(cmc_a, select=c(label, target.clade.omega.2))
+cmc_a_2_t$class = "Target omega Auto 2"
+names(cmc_a_2_t)[2] = "omega"
+cmc_a_3_t = subset(cmc_a, select=c(label, target.clade.omega.3))
+cmc_a_3_t$class = "Target omega Auto 3"
+names(cmc_a_3_t)[2] = "omega"
+
+cmc_x = subset(cmc_data, chr!="ScmyWZ3_7747_HRSCAF_7900")
+cmc_x$label = "Phodopus X"
+
+cmc_x_1_b = subset(cmc_x, select=c(label, background.clade.omega.1))
+cmc_x_1_b$class = "Background omega X 1"
+names(cmc_x_1_b)[2] = "omega"
+cmc_x_2_b = subset(cmc_x, select=c(label, background.clade.omega.2))
+cmc_x_2_b$class = "Background omega X 2"
+names(cmc_x_2_b)[2] = "omega"
+cmc_x_3_b = subset(cmc_x, select=c(label, background.clade.omega.3))
+cmc_x_3_b$class = "Background omega X 3"
+names(cmc_x_3_b)[2] = "omega"
+
+cmc_x_1_t= subset(cmc_x, select=c(label, target.clade.omega.1))
+cmc_x_1_t$class = "Target omega X 1"
+names(cmc_x_1_t)[2] = "omega"
+cmc_x_2_t = subset(cmc_x, select=c(label, target.clade.omega.2))
+cmc_x_2_t$class = "Target omega X 2"
+names(cmc_x_2_t)[2] = "omega"
+cmc_x_3_t = subset(cmc_x, select=c(label, target.clade.omega.3))
+cmc_x_3_t$class = "Target omega X 3"
+names(cmc_x_3_t)[2] = "omega"
+
+cmc_data_long = rbind(cmc_a_1_b, cmc_a_2_b, cmc_a_3_b, cmc_a_1_t, cmc_a_2_t, cmc_a_3_t,
+                      cmc_x_1_b, cmc_x_2_b, cmc_x_3_b, cmc_x_1_t, cmc_x_2_t, cmc_x_3_t)
+
+cmc_data_long = subset(cmc_data_long, omega < 2)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Target omega X 3", "Target omega Auto 3"))
+
+cmc_dnds_p = ggplot(cmc_data_long, aes(class, omega, fill=class)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  #scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=25, hjust=1, size=10)
+        )
+
+print(cmc_dnds_p)
+```
+
+# Results (M2 when setting all phodopus branches and all mus branches as targets)
+
+```{r read-m2, warning=FALSE}
+pho_m2_data = read.csv("../../data/mol-evol/phodopus-5spec-m2.csv", header=T, comment.char="#")
+pho_m2_data$clade = as.character(pho_m2_data$clade)
+# Phodopus data
+
+mus_m2_data = read.csv("../../data/mol-evol/mus-4spec-m2.csv", header=T, comment.char="#")
+mus_m2_data$clade = as.character(mus_m2_data$clade)
+# Mus data
+```
+
+## 0. dS distributions by branch for filtering
+
+```{r filter-pho-m2, warning=FALSE}
+pho_data$avg.dnds = NA
+pho_data$avg.dn = NA
+pho_data$avg.ds = NA
+pho_data$num.monophyletic = NA
+pho_data$num.monophyletic.filtered = NA
+
+pho_clade_data = list()
+pho_clade_data_f = list()
+pho_ds_dists = list()
+i =  1
+for(c in pho_data$clade){
+  if(pho_data$node.type[pho_data$clade==c]=="ROOT"){
+    next
+  }
+  
+  cur_label = as.character(pho_data$clade.label[pho_data$clade==c])
+  cur_data = subset(pho_m2_data, clade==c & clade.ds <= 2)
+  cur_data$clade.label = cur_label
+  
+  ds_dist = ggplot(cur_data, aes(x=clade.ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(pho_data$clade.label[pho_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+  
+  #print(ds_dist)
+  #stop()
+  pho_ds_dists[[i]] = ds_dist
+  i = i + 1
+  
+  cur_data_f = subset(cur_data, clade.ds < 0.3 & clade.dn.ds <= 2)
+  
+  pho_data$num.monophyletic[pho_data$clade==c] = nrow(cur_data)
+  pho_data$num.monophyletic.filtered[pho_data$clade==c] = nrow(cur_data_f)
+  pho_data$avg.dnds[pho_data$clade==c] = mean(cur_data_f$clade.dn.ds)
+  pho_data$avg.dn[pho_data$clade==c] = mean(cur_data_f$clade.dn)
+  pho_data$avg.ds[pho_data$clade==c] = mean(cur_data$clade.ds)
+  
+  pho_clade_data[[cur_label]] = length(cur_data[,1])
+  pho_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+```{r filter-mus-m2, warning=FALSE}
+mus_data$avg.dnds = NA
+mus_data$avg.dn = NA
+mus_data$avg.ds = NA
+mus_data$num.monophyletic = NA
+mus_data$num.monophyletic.filtered = NA
+
+mus_clade_data = list()
+mus_clade_data_f = list()
+mus_ds_dists = list()
+i =  1
+for(c in mus_data$clade){
+  if(mus_data$node.type[mus_data$clade==c]=="ROOT"){
+    next
+  }
+
+  cur_label = as.character(mus_data$clade.label[mus_data$clade==c])
+  cur_data = subset(mus_m2_data, clade==c & clade.ds <= 2)
+  cur_data$clade.label = cur_label
+
+  ds_dist = ggplot(cur_data, aes(x=clade.ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(mus_data$clade.label[mus_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+
+  #print(ds_dist)
+  #stop()
+  mus_ds_dists[[i]] = ds_dist
+  i = i + 1
+
+  cur_data_f = subset(cur_data, clade.ds < 0.3 & clade.dn.ds <= 2)
+
+  mus_data$num.monophyletic[mus_data$clade==c] = nrow(cur_data)
+  mus_data$num.monophyletic.filtered[mus_data$clade==c] = nrow(cur_data_f)
+  mus_data$avg.dnds[mus_data$clade==c] = mean(cur_data_f$clade.dn.ds)
+  mus_data$avg.dn[mus_data$clade==c] = mean(cur_data_f$clade.dn)
+  mus_data$avg.ds[mus_data$clade==c] = mean(cur_data$clade.ds)
+
+  mus_clade_data[[cur_label]] = length(cur_data[,1])
+  mus_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+```{r fig12, warning=FALSE, message=FALSE, out.width="100%", fig.align="center"}
+ds_plots = plot_grid(plotlist=pho_ds_dists, nrow=3)
+print(ds_plots)
+
+ds_plots = plot_grid(plotlist=mus_ds_dists, nrow=3)
+print(ds_plots)
+```
+
+## 1. X vs. autosome dS distributions in Mus and Phodopus
+ * Estimates are averaged across all branches in clade.
+
+```{r fig13, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_branches = c("cs", "psun", "pcam", "prob")
+pho_a = data.frame()
+pho_x = data.frame()
+for(b in pho_branches){
+  pho_a = rbind(pho_a, subset(pho_clade_data_f[[b]], chr!="ScmyWZ3_7747_HRSCAF_7900"))
+  pho_x = rbind(pho_x, subset(pho_clade_data_f[[b]], chr=="ScmyWZ3_7747_HRSCAF_7900"))
+}
+pho_x = pho_x %>% group_by(id, chr, start, end) %>% 
+  summarize(ds=mean(clade.ds, na.rm=T), dn=mean(clade.dn, na.rm=T), dn.ds=mean(clade.dn.ds, na.rm=T))
+pho_x$label = "Phodopus X"
+pho_a = pho_a %>% group_by(id, chr, start, end) %>% 
+  summarize(ds=mean(clade.ds, na.rm=T), dn=mean(clade.dn, na.rm=T), dn.ds=mean(clade.dn.ds, na.rm=T))
+pho_a$label = "Phodopus Auto"
+
+mus_branches = c("cm", "mpah", "mcar", "mmus")
+mus_a = data.frame()
+mus_x = data.frame()
+for(b in mus_branches){
+  mus_a = rbind(mus_a, subset(mus_clade_data_f[[b]], chr!="X"))
+  mus_x = rbind(mus_x, subset(mus_clade_data_f[[b]], chr=="X"))
+}
+mus_x = mus_x %>% group_by(id, chr, start, end) %>% 
+  summarize(ds=mean(clade.ds, na.rm=T), dn=mean(clade.dn, na.rm=T), dn.ds=mean(clade.dn.ds, na.rm=T))
+mus_x$label = "Mus X"
+mus_a = mus_a %>% group_by(id, chr, start, end) %>% 
+  summarize(ds=mean(clade.ds, na.rm=T), dn=mean(clade.dn, na.rm=T), dn.ds=mean(clade.dn.ds, na.rm=T))
+mus_a$label = "Mus Auto"
+
+chrome_data = rbind(pho_x, pho_a, mus_x, mus_a)
+
+# t = as.data.frame(table(chrome_data$chr))
+# test = ggplot(t, aes(x=Var1, y=Freq)) +
+#   geom_bar(stat="identity") +
+#   scale_y_continuous(expand=c(0,0)) +
+#   bartheme() +
+#   theme()
+# print(test)
+
+
+#clade_cols = as.character(rodent_data$clade.col)
+#clade_labs = as.character(rodent_data$clade.label)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_ds_p)
+```
+
+## 2. X vs. autosome dN distributions in Mus and Phodopus
+ * Estimates are averaged across all branches in clade.
+
+```{r fig14, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dn_p)
+```
+
+## 3. X vs. autosome dN/dS distributions in Mus and Phodopus
+ * Single estimate for whole clade.
+
+```{r fig15, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dnds_p)
+```
+
+## 4. X vs. autosome dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Estimates are averaged across all branches in clade.
+
+```{r fig16, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_xr = subset(pho_x, start < 35225145)
+pho_xr$label = "Phodopus X recombining"
+pho_xnr = subset(pho_x, start >= 35225145)
+pho_xnr$label = "Phodopus X non-recombining"
+
+chrome_data = rbind(mus_a, mus_x, pho_a, pho_xr, pho_xnr)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_ds_p)
+```
+
+## 5. X vs. autosome dN distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Estimates are averaged across all branches in clade.
+
+```{r fig17, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dn_p)
+```
+
+## 6. X vs. autosome dN/dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Single estimate for whole clade.
+
+```{r fig18, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dnds_p)
+```
+
+## 7. M2 summary stats
+
+```{r table5, warning=FALSE}
+t5_data = data.frame("chrome"=c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X non-recombining", "Phodopus X recombining"), 
+                     "genes"=c(length(mus_a[,1]), length(mus_x[,1]), length(pho_a[,1]), length(pho_xnr[,1]), length(pho_xr[,1])), 
+                     "avg.ds"=c(mean(mus_a$ds), mean(mus_x$ds), mean(pho_a$ds), mean(pho_xnr$ds), mean(pho_xr$ds)), 
+                     "avg.dn"=c(mean(mus_a$dn), mean(mus_x$dn), mean(pho_a$dn), mean(pho_xnr$dn), mean(pho_xr$dn)), 
+                     "avg.dnds"=c(mean(mus_a$dn.ds), mean(mus_x$dn.ds), mean(pho_a$dn.ds), mean(pho_xnr$dn.ds), mean(pho_xr$dn.ds))
+                     )
+
+rownames(t5_data) = c()
+
+t5_data %>% kable(col.names=c("Chromosome","Number of genes", "Avg. dS", "Avg. dN", "Avg. dN/dS"), caption="Substitution rates for Mus and Phodopus branches", align="l") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)# %>%
+  #column_spec(1, width="7em") %>%
+  #column_spec(2, width="13em")
+
+```
+
+# Results (Hyphy free ratio model [FitMG94], branch leading to phodopus and mus only)
+
+```{r read-mg, warning=FALSE}
+pho_mg_data = read.csv("../../data/mol-evol/phodopus-5spec-mg94-local.csv", header=T, comment.char="#")
+pho_mg_data$clade = as.character(pho_mg_data$clade)
+pho_mg_data$clade[pho_mg_data$clade=="psun;pcam"] = "pcam;psun"
+pho_mg_data$clade[pho_mg_data$clade=="psun;pcam;prob"] = "pcam;prob;psun"
+pho_mg_data$clade[pho_mg_data$clade=="psun;prob;pcam"] = "pcam;prob;psun"
+pho_mg_data$clade[pho_mg_data$clade=="pcam;psun;prob"] = "pcam;prob;psun"
+pho_mg_data$clade[pho_mg_data$clade=="prob;psun;pcam"] = "pcam;prob;psun"
+pho_mg_data$clade[pho_mg_data$clade=="prob;pcam;psun"] = "pcam;prob;psun"
+# Phodopus data
+
+mus_mg_data = read.csv("../../data/mol-evol/mus-4spec-mg94-local.csv", header=T, comment.char="#")
+mus_mg_data$clade = as.character(mus_mg_data$clade)
+mus_mg_data$clade[mus_mg_data$clade=="mmus;mcar"] = "mcar;mmus"
+mus_mg_data$clade[mus_mg_data$clade=="mmus;mcar;mpah"] = "mcar;mmus;mpah"
+mus_mg_data$clade[mus_mg_data$clade=="mmus;mpah;mcar"] = "mcar;mmus;mpah"
+mus_mg_data$clade[mus_mg_data$clade=="mpah;mmus;mcar"] = "mcar;mmus;mpah"
+mus_mg_data$clade[mus_mg_data$clade=="mpah;mcar;mmus"] = "mcar;mmus;mpah"
+mus_mg_data$clade[mus_mg_data$clade=="mcar;mpah;mmus"] = "mcar;mmus;mpah"
+# Mus data
+```
+
+## 0. dS distributions by branch for filtering
+
+```{r filter-pho-mg, warning=FALSE}
+pho_data$avg.dnds = NA
+pho_data$avg.dn = NA
+pho_data$avg.ds = NA
+pho_data$num.monophyletic = NA
+pho_data$num.monophyletic.filtered = NA
+
+pho_clade_data = list()
+pho_clade_data_f = list()
+pho_ds_dists = list()
+i =  1
+for(c in pho_data$clade){
+  if(pho_data$node.type[pho_data$clade==c]=="ROOT"){
+    next
+  }
+  
+  cur_label = as.character(pho_data$clade.label[pho_data$clade==c])
+  cur_data = subset(pho_mg_data, clade==c & ds <= 2)
+  cur_data$clade.label = cur_label
+  
+  ds_dist = ggplot(cur_data, aes(x=ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(pho_data$clade.label[pho_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+  
+  #print(ds_dist)
+  #stop()
+  pho_ds_dists[[i]] = ds_dist
+  i = i + 1
+  
+  cur_data_f = subset(cur_data, ds < 0.3 & dn.ds <= 2)
+  
+  pho_data$num.monophyletic[pho_data$clade==c] = nrow(cur_data)
+  pho_data$num.monophyletic.filtered[pho_data$clade==c] = nrow(cur_data_f)
+  pho_data$avg.dnds[pho_data$clade==c] = mean(cur_data_f$dn.ds)
+  pho_data$avg.dn[pho_data$clade==c] = mean(cur_data_f$dn)
+  pho_data$avg.ds[pho_data$clade==c] = mean(cur_data$ds)
+  
+  pho_clade_data[[cur_label]] = length(cur_data[,1])
+  pho_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+```{r filter-mus-mg, warning=FALSE}
+mus_data$avg.dnds = NA
+mus_data$avg.dn = NA
+mus_data$avg.ds = NA
+mus_data$num.monophyletic = NA
+mus_data$num.monophyletic.filtered = NA
+
+mus_clade_data = list()
+mus_clade_data_f = list()
+mus_ds_dists = list()
+i =  1
+for(c in mus_data$clade){
+  if(mus_data$node.type[mus_data$clade==c]=="ROOT"){
+    next
+  }
+  print(c)
+  cur_label = as.character(mus_data$clade.label[mus_data$clade==c])
+  cur_data = subset(mus_mg_data, clade==c & ds <= 2)
+  cur_data$clade.label = cur_label
+
+  ds_dist = ggplot(cur_data, aes(x=ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(mus_data$clade.label[mus_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+
+  #print(ds_dist)
+  #stop()
+  mus_ds_dists[[i]] = ds_dist
+  i = i + 1
+
+  cur_data_f = subset(cur_data, ds < 0.3 & dn.ds <= 2)
+
+  mus_data$num.monophyletic[mus_data$clade==c] = nrow(cur_data)
+  mus_data$num.monophyletic.filtered[mus_data$clade==c] = nrow(cur_data_f)
+  mus_data$avg.dnds[mus_data$clade==c] = mean(cur_data_f$dn.ds)
+  mus_data$avg.dn[mus_data$clade==c] = mean(cur_data_f$dn)
+  mus_data$avg.ds[mus_data$clade==c] = mean(cur_data$ds)
+
+  mus_clade_data[[cur_label]] = length(cur_data[,1])
+  mus_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+```{r fig19, warning=FALSE, message=FALSE, out.width="100%", fig.align="center"}
+ds_plots = plot_grid(plotlist=pho_ds_dists, nrow=3)
+print(ds_plots)
+
+ds_plots = plot_grid(plotlist=mus_ds_dists, nrow=3)
+print(ds_plots)
+```
+
+## 1. X vs. autosome dS distributions in Mus and Phodopus
+
+```{r fig20, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_branches = c("cs")
+pho_a = data.frame()
+pho_x = data.frame()
+for(b in pho_branches){
+  pho_a = rbind(pho_a, subset(pho_clade_data_f[[b]], chr!="ScmyWZ3_7747_HRSCAF_7900"))
+  pho_x = rbind(pho_x, subset(pho_clade_data_f[[b]], chr=="ScmyWZ3_7747_HRSCAF_7900"))
+}
+#pho_x = pho_x %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+pho_x$label = "Phodopus X"
+#pho_a = pho_a %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+pho_a$label = "Phodopus Auto"
+
+mus_branches = c("cm")
+mus_a = data.frame()
+mus_x = data.frame()
+for(b in mus_branches){
+  mus_a = rbind(mus_a, subset(mus_clade_data_f[[b]], chr!="X"))
+  mus_x = rbind(mus_x, subset(mus_clade_data_f[[b]], chr=="X"))
+}
+#mus_x = mus_x %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+mus_x$label = "Mus X"
+#mus_a = mus_a %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+mus_a$label = "Mus Auto"
+
+chrome_data = rbind(pho_x, pho_a, mus_x, mus_a)
+
+# t = as.data.frame(table(chrome_data$chr))
+# test = ggplot(t, aes(x=Var1, y=Freq)) +
+#   geom_bar(stat="identity") +
+#   scale_y_continuous(expand=c(0,0)) +
+#   bartheme() +
+#   theme()
+# print(test)
+
+
+#clade_cols = as.character(rodent_data$clade.col)
+#clade_labs = as.character(rodent_data$clade.label)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_ds_p)
+```
+
+## 2. X vs. autosome dN distributions in Mus and Phodopus
+
+```{r fig21, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dn_p)
+```
+
+## 3. X vs. autosome dN/dS distributions in Mus and Phodopus
+
+```{r fig22, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dnds_p)
+```
+
+## 4. X vs. autosome dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Estimates are averaged across all branches in clade.
+
+```{r fig23, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_xr = subset(pho_x, start < 35225145)
+pho_xr$label = "Phodopus X recombining"
+pho_xnr = subset(pho_x, start >= 35225145)
+pho_xnr$label = "Phodopus X non-recombining"
+
+chrome_data = rbind(mus_a, mus_x, pho_a, pho_xr, pho_xnr)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_ds_p)
+```
+
+## 5. X vs. autosome dN distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Estimates are averaged across all branches in clade.
+
+```{r fig24, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dn_p)
+```
+
+## 6. X vs. autosome dN/dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Single estimate for whole clade.
+
+```{r fig25, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dnds_p)
+```
+
+## 7. HyPhy MG94 summary stats
+
+```{r table6, warning=FALSE}
+t6_data = data.frame("chrome"=c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X non-recombining", "Phodopus X recombining"), 
+                     "genes"=c(length(mus_a[,1]), length(mus_x[,1]), length(pho_a[,1]), length(pho_xnr[,1]), length(pho_xr[,1])), 
+                     "avg.ds"=c(mean(mus_a$ds), mean(mus_x$ds), mean(pho_a$ds), mean(pho_xnr$ds), mean(pho_xr$ds)), 
+                     "avg.dn"=c(mean(mus_a$dn), mean(mus_x$dn), mean(pho_a$dn), mean(pho_xnr$dn), mean(pho_xr$dn)), 
+                     "avg.dnds"=c(mean(mus_a$dn.ds), mean(mus_x$dn.ds), mean(pho_a$dn.ds), mean(pho_xnr$dn.ds), mean(pho_xr$dn.ds))
+                     )
+
+rownames(t6_data) = c()
+
+t6_data %>% kable(col.names=c("Chromosome","Number of genes", "Avg. dS", "Avg. dN", "Avg. dN/dS"), caption="Substitution rates for Mus and Phodopus branches", align="l") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)# %>%
+  #column_spec(1, width="7em") %>%
+  #column_spec(2, width="13em")
+
+```
+
+
+# Results (Hyphy free ratio local model [FitMG94], branch leading to phodopus only, only Cgri as outgroup)
+
+```{r read-4spec, warning=FALSE}
+pho_tree_file = "../../data/mol-evol/phodopus-4spec-iqtree-concat-rooted.tre"
+pho_tree = read.tree(pho_tree_file)
+pho_trait_file = "../../data/mol-evol/phodopus-4spec-concat-traits.csv"
+pho_data = read.csv(pho_trait_file, header=TRUE)
+pho_data = pho_data[order(pho_data$ggtree),]
+pho_branch_labels = pho_data
+pho_branch_labels$node[pho_branch_labels$node.type=='tip'] = NA
+pho_data$clade = as.character(pho_data$clade)
+# Phodopus data
+```
+
+```{r read-mg-local, warning=FALSE}
+pho_mg_data = read.csv("../../data/mol-evol/phodopus-4spec-mg94-local.csv", header=T, comment.char="#")
+pho_mg_data$clade = as.character(pho_mg_data$clade)
+#names(pho_mg_data)[8] = "n1"
+#names(pho_mg_data)[9] = "n2"
+#names(pho_mg_data)[11] = "dn"
+#names(pho_mg_data)[12] = "ds"
+#pho_mg_data = subset(pho_mg_data, select=-c(n1, n2))
+#pho_mg_data = subset(pho_mg_data, select=-c(nonsynonymous.bl, synonymous.bl))
+# Phodopus data
+```
+
+## 0. dS distributions by branch for filtering
+
+```{r filter-pho-mg-local, warning=FALSE}
+pho_data$avg.dnds = NA
+pho_data$avg.dn = NA
+pho_data$avg.ds = NA
+pho_data$num.monophyletic = NA
+pho_data$num.monophyletic.filtered = NA
+
+pho_clade_data = list()
+pho_clade_data_f = list()
+pho_ds_dists = list()
+i =  1
+for(c in pho_data$clade){
+  if(pho_data$node.type[pho_data$clade==c]=="ROOT"){
+    next
+  }
+  
+  cur_label = as.character(pho_data$clade.label[pho_data$clade==c])
+  cur_data = subset(pho_mg_data, clade==c & ds <= 2)
+  cur_data$clade.label = cur_label
+  
+  ds_dist = ggplot(cur_data, aes(x=ds)) +
+    geom_histogram(color="#000000", fill="#d3d3d3") +
+    scale_y_continuous(expand=c(0,0)) +
+    xlab("dS") +
+    ylab("# of genes") +
+    ggtitle(pho_data$clade.label[pho_data$clade==c]) +
+    theme(axis.text.x = element_text(angle=90, hjust=1, size=8))
+  
+  #print(ds_dist)
+  #stop()
+  pho_ds_dists[[i]] = ds_dist
+  i = i + 1
+  
+  cur_data_f = subset(cur_data, ds < 0.3 & dn.ds <= 2)
+  
+  pho_data$num.monophyletic[pho_data$clade==c] = nrow(cur_data)
+  pho_data$num.monophyletic.filtered[pho_data$clade==c] = nrow(cur_data_f)
+  pho_data$avg.dnds[pho_data$clade==c] = mean(cur_data_f$dn.ds)
+  pho_data$avg.dn[pho_data$clade==c] = mean(cur_data_f$dn)
+  pho_data$avg.ds[pho_data$clade==c] = mean(cur_data$ds)
+  
+  pho_clade_data[[cur_label]] = length(cur_data[,1])
+  pho_clade_data_f[[cur_label]] = cur_data_f
+}
+```
+
+```{r fig26, warning=FALSE, message=FALSE, out.width="100%", fig.align="center"}
+ds_plots = plot_grid(plotlist=pho_ds_dists, nrow=3)
+print(ds_plots)
+```
+
+## 1. X vs. autosome dS distributions in Mus and Phodopus
+
+```{r fig27, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_branches = c("cs")
+pho_a = data.frame()
+pho_x = data.frame()
+for(b in pho_branches){
+  pho_a = rbind(pho_a, subset(pho_clade_data_f[[b]], chr!="ScmyWZ3_7747_HRSCAF_7900"))
+  pho_x = rbind(pho_x, subset(pho_clade_data_f[[b]], chr=="ScmyWZ3_7747_HRSCAF_7900"))
+}
+#pho_x = pho_x %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+pho_x$label = "Phodopus X"
+#pho_a = pho_a %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+pho_a$label = "Phodopus Auto"
+
+mus_branches = c("cm")
+mus_a = data.frame()
+mus_x = data.frame()
+for(b in mus_branches){
+  mus_a = rbind(mus_a, subset(mus_clade_data_f[[b]], chr!="X"))
+  mus_x = rbind(mus_x, subset(mus_clade_data_f[[b]], chr=="X"))
+}
+#mus_x = mus_x %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+mus_x$label = "Mus X"
+#mus_a = mus_a %>% group_by(id, chr, start, end) %>% 
+#  summarize(ds=mean(ds, na.rm=T), dn=mean(dn, na.rm=T), dn.ds=mean(dn.ds, na.rm=T))
+mus_a$label = "Mus Auto"
+
+chrome_data = rbind(pho_x, pho_a, mus_x, mus_a)
+
+# t = as.data.frame(table(chrome_data$chr))
+# test = ggplot(t, aes(x=Var1, y=Freq)) +
+#   geom_bar(stat="identity") +
+#   scale_y_continuous(expand=c(0,0)) +
+#   bartheme() +
+#   theme()
+# print(test)
+
+
+#clade_cols = as.character(rodent_data$clade.col)
+#clade_labs = as.character(rodent_data$clade.label)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_ds_p)
+```
+
+## 2. X vs. autosome dN distributions in Mus and Phodopus
+
+```{r fig28, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dn_p)
+```
+
+## 3. X vs. autosome dN/dS distributions in Mus and Phodopus
+
+```{r fig29, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+
+print(chrome_dnds_p)
+```
+
+## 4. X vs. autosome dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Estimates are averaged across all branches in clade.
+
+```{r fig30, warning=FALSE, out.width="100%", fig.align="center"}
+
+pho_xr = subset(pho_x, start < 35225145)
+pho_xr$label = "Phodopus X recombining"
+pho_xnr = subset(pho_x, start >= 35225145)
+pho_xnr$label = "Phodopus X non-recombining"
+
+chrome_data = rbind(mus_a, mus_x, pho_a, pho_xr, pho_xnr)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_ds_p = ggplot(chrome_data, aes(label, ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("ds") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_ds_p)
+```
+
+## 5. X vs. autosome dN distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Estimates are averaged across all branches in clade.
+
+```{r fig31, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dn_p = ggplot(chrome_data, aes(label, dn, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dn_p)
+```
+
+## 6. X vs. autosome dN/dS distributions in Mus and Phodopus, partitioning Phodopus X between recombining and non-recombining regions
+ * Single estimate for whole clade.
+
+```{r fig32, warning=FALSE, out.width="100%", fig.align="center"}
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+chrome_dnds_p = ggplot(chrome_data, aes(label, dn.ds, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Chromosomes") +
+  ylab("dN/dS") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10)
+        )
+
+print(chrome_dnds_p)
+```
+
+## 7. HyPhy MG94 local summary stats
+
+```{r table7, warning=FALSE}
+t6_data = data.frame("chrome"=c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X non-recombining", "Phodopus X recombining"), 
+                     "genes"=c(length(mus_a[,1]), length(mus_x[,1]), length(pho_a[,1]), length(pho_xnr[,1]), length(pho_xr[,1])), 
+                     "avg.ds"=c(mean(mus_a$ds), mean(mus_x$ds), mean(pho_a$ds), mean(pho_xnr$ds), mean(pho_xr$ds)), 
+                     "avg.dn"=c(mean(mus_a$dn), mean(mus_x$dn), mean(pho_a$dn), mean(pho_xnr$dn), mean(pho_xr$dn)), 
+                     "avg.dnds"=c(mean(mus_a$dn.ds), mean(mus_x$dn.ds), mean(pho_a$dn.ds), mean(pho_xnr$dn.ds), mean(pho_xr$dn.ds))
+                     )
+
+rownames(t6_data) = c()
+
+t6_data %>% kable(col.names=c("Chromosome","Number of genes", "Avg. dS", "Avg. dN", "Avg. dN/dS"), caption="Substitution rates for Mus and Phodopus branches", align="l") %>% kable_styling(bootstrap_options=c("striped", "condensed", "responsive"), full_width=F)# %>%
+  #column_spec(1, width="7em") %>%
+  #column_spec(2, width="13em")
+
+```
+
+# Amino acid profile change
+
+Ancestral reconstructions with M1 free-ratio model, branches leading to Mus clade and Phodopus Clade
+
+```{r fig33, warning=FALSE, out.width="100%", fig.align="center"}
+pho_aa_data = read.csv("../../data/mol-evol/phodopus-5spec-m1-anc.csv", header=T, comment.char="#")
+pho_aa_data = subset(pho_aa_data, clade=="pcam;prob;psun")
+
+pho_aa_x = subset(pho_aa_data, chr=="ScmyWZ3_7747_HRSCAF_7900")
+pho_aa_x$label = "Phodopus X"
+
+pho_aa_auto = subset(pho_aa_data, chr!="ScmyWZ3_7747_HRSCAF_7900")
+pho_aa_auto$label = "Phodopus Auto"
+
+
+mus_aa_data = read.csv("../../data/mol-evol/mus-4spec-m1-anc.csv", header=T, comment.char="#")
+mus_aa_data = subset(mus_aa_data, clade=="mcar;mmus;mpah")
+
+mus_aa_x = subset(mus_aa_data, chr=="X")
+mus_aa_x$label = "Mus X"
+
+mus_aa_auto = subset(mus_aa_data, chr!="X")
+mus_aa_auto$label = "Mus Auto"
+
+aa_data = rbind(pho_aa_x, pho_aa_auto, mus_aa_x, mus_aa_auto)
+x_comps = list(c("Phodopus Auto", "Phodopus X"), c("Mus Auto", "Mus X"), c("Mus Auto", "Phodopus Auto"), c("Mus X", "Phodopus X"))
+
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X")
+
+aa_p = ggplot(aa_data, aes(label, avg.sub.score, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("Avg. BLOSUM score per gene") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none")
+print(aa_p)
+```
+
+```{r fig34, warning=FALSE, out.width="100%", fig.align="center"}
+pho_aa_xr = subset(pho_aa_x, start < 35225145)
+pho_aa_xr$label = "Phodopus X recombining"
+
+pho_aa_xn = subset(pho_aa_x, start >= 35225145)
+pho_aa_xn$label = "Phodopus X non-recombining"
+
+aa_data = rbind(pho_aa_xr, pho_aa_xn, pho_aa_auto, mus_aa_x, mus_aa_auto)
+
+chrome_cols = c("#006ddb", "#006ddb", "#db6d00", "#db6d00", "#db6d00")
+chrome_labs = c("Mus Auto", "Mus X", "Phodopus Auto", "Phodopus X recombining", "Phodopus X non-recombining")
+
+x_comps = list(c("Phodopus X recombining", "Phodopus X non-recombining"), c("Phodopus Auto", "Phodopus X recombining"), c("Phodopus Auto", "Phodopus X non-recombining"))
+
+aa_p = ggplot(aa_data, aes(label, avg.sub.score, fill=label)) +
+  geom_quasirandom(size=0.5, alpha=0.3, width=0.25, color="#d3d3d3") +
+  geom_boxplot(outlier.shape=NA, alpha=0.7, width=0.5) +
+  geom_signif(comparisons=x_comps, map_signif_level=TRUE, textsize=4, size=1, step_increase=0.12, margin_top=0.1) +
+  xlab("Branch") +
+  ylab("Avg. BLOSUM score per gene") +
+  scale_fill_manual(limits=chrome_labs, values=chrome_cols) +
+  bartheme() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle=10, hjust=1, size=10))
+print(aa_p)
+```
+
+# Results summary
+
+1. Lower dS on X in both Mus and Phodopus
+2. Faster dN/dS on X in branches leading to Mus and Phodopus (M1), Mus clade (M2), but NOT phodopus clade (M2). Results consistent between PAML's M1 model and HyPhy's FitMG94.
+3. No difference between recombining and non-recombining portions of the X in phodopus.
+4. No big difference between amino acid profile changes between Mus and Phodopus or Autosomes and X.
+
+[< Back Home](index.html)
+
+```{r footer}
+cat("Page last updated:", format(Sys.time(), "%m/%d/%Y %H:%M:%S %Z"))
+htmltools::includeHTML("../html-chunks/rmd_footer.html")
+```
